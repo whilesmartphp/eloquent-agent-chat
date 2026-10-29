@@ -1,0 +1,55 @@
+{
+    "name": "whilesmart/eloquent-agent-chat",
+    "description": "Agent turns for conversations: queued runs of an eloquent-agents harness with live progress, rich reply blocks, render tools and canvas export.",
+    "type": "library",
+    "version": "1.0.0",
+    "license": "MIT",
+    "authors": [
+        { "name": "Whilesmart Team" }
+    ],
+    "require": {
+        "php": "^8.2",
+        "laravel/framework": "^11.0|^12.0",
+        "whilesmart/eloquent-agents": "^1.1",
+        "whilesmart/eloquent-conversations": "^1.0",
+        "whilesmart/eloquent-owner-access": "^1.0"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^9.0|^10.0",
+        "laravel/pint": "^1.22",
+        "fakerphp/faker": "^1.24"
+    },
+    "config": {
+        "platform": {
+            "php": "8.2"
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "Whilesmart\\AgentChat\\": "src/",
+            "Whilesmart\\AgentChat\\Database\\Factories\\": "database/factories/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Whilesmart\\AgentChat\\AgentChatServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/testbench package:test",
+        "clear": "@php vendor/bin/testbench package:purge-skeleton --ansi",
+        "prepare": "@php vendor/bin/testbench package:discover --ansi",
+        "build": "@php vendor/bin/testbench workbench:build --ansi",
+        "pint": ["./vendor/bin/pint"],
+        "pint:test": ["./vendor/bin/pint --test"]
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
