@@ -9,6 +9,8 @@ namespace Whilesmart\AgentChat\Blocks;
  */
 class BlockBuilder
 {
+    public const CORE_TYPES = ['markdown', 'table', 'kpi', 'chart', 'callout', 'timeline', 'progress', 'question', 'image', 'canvas'];
+
     /**
      * @return array{type: string, text: string}
      */
@@ -100,7 +102,7 @@ class BlockBuilder
 
     /**
      * A question with selectable answers. Picking an option sends its message
-     * back as the user's next turn.
+     * back as the user's next prompt.
      *
      * @param  array<int, array{label?: string, message?: string}|string>  $options
      * @return array<string, mixed>
@@ -121,6 +123,24 @@ class BlockBuilder
         }
 
         return ['type' => 'question', 'prompt' => $prompt, 'options' => $normalized];
+    }
+
+    /**
+     * An image shown in the reply. `attachment` is the image's position in the
+     * reply message's attachments, so the file is stored once.
+     *
+     * @param  array{type: string, id: mixed}|null  $ref
+     * @return array<string, mixed>
+     */
+    public function image(?string $src, ?string $alt = null, ?int $attachment = null, ?array $ref = null): array
+    {
+        return $this->compact([
+            'type' => 'image',
+            'src' => $src,
+            'alt' => $alt,
+            'attachment' => $attachment,
+            'ref' => $ref,
+        ]);
     }
 
     /**

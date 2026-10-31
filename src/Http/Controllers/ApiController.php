@@ -20,13 +20,13 @@ class ApiController extends Controller
         return app(ResponseFormatter::class)->failure($message, $statusCode, $errors);
     }
 
-    protected function resourceClass(): string
+    protected function resourceClass(string $key = 'run'): string
     {
-        $resourceClass = config('agent-chat.resources.turn');
+        $resourceClass = config("agent-chat.resources.{$key}");
 
         if (! is_a($resourceClass, JsonResource::class, true)) {
             throw new InvalidArgumentException(
-                'The configured agent-chat turn resource must extend '.JsonResource::class.'.',
+                "The configured agent-chat {$key} resource must extend ".JsonResource::class.'.',
             );
         }
 
