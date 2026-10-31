@@ -2,6 +2,7 @@
 
 namespace Whilesmart\AgentChat\Runs;
 
+use Whilesmart\AgentChat\Blocks\QuestionAnswers;
 use Whilesmart\AgentChat\Contracts\RunInputBuilder;
 use Whilesmart\AgentChat\Models\AgentRun;
 use Whilesmart\Conversations\Enums\MessageDirection;
@@ -16,11 +17,12 @@ use Whilesmart\Conversations\Models\Message;
  * Agent replies are recognised by the run that wrote them. A message with no
  * author and no run came from an outside contact or the team, never the agent.
  * Attached files are named in the text; the media resolver decides what the
- * model actually sees.
+ * model actually sees. Answers sent with the prompt follow it, each with the
+ * question it settles.
  */
 class DefaultRunInputBuilder implements RunInputBuilder
 {
-    public function __construct(private ConversationCanvas $canvases) {}
+    public function __construct(private ConversationCanvas $canvases, private QuestionAnswers $answers) {}
 
     public function build(AgentRun $run): string
     {
@@ -52,7 +54,16 @@ class DefaultRunInputBuilder implements RunInputBuilder
                 .'To change or extend it, call update_canvas rather than open_canvas.';
         }
 
-        $parts[] = $prompt === null ? 'User:' : (string) $this->line('User', $prompt);
+        $line = $prompt === null ? null : $this->line('User', $prompt);
+        $answered = $prompt === null ? null : $this->answers->describe($prompt);
+
+        if ($line !== null || $answered === null) {
+            $parts[] = $line ?? 'User:';
+        }
+
+        if ($answered !== null) {
+            $parts[] = $answered;
+        }
 
         return implode("\n\n", $parts);
     }

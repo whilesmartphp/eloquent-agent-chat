@@ -82,9 +82,9 @@ Routes use the configured prefix (default `api`) and middleware (default `['api'
 
 | Method | Path | Action |
 |---|---|---|
-| POST | `/conversations/{conversation}/agent-runs` | Post a prompt as the signed-in user: `body` and/or `attachments`, plus optional `harness` (from `agent-chat.harnesses`), `language`, `options` and `hold`. Returns 202. |
+| POST | `/conversations/{conversation}/agent-runs` | Post a prompt as the signed-in user: `body`, `attachments` and/or `answers`, plus optional `harness` (from `agent-chat.harnesses`), `language`, `options` and `hold`. Returns 202. |
 | GET | `/agent-runs` | List runs the user can reach. Filter by `conversation_id` and `status`. |
-| GET | `/agent-runs/{run}` | Status, progress, error, the current attempt and the reply with its blocks and attachments. |
+| GET | `/agent-runs/{run}` | Status, progress, error, the answers the prompt sent, the current attempt and the reply with its blocks and attachments. |
 | GET | `/agent-runs/{run}/attempts` | Every attempt in order. |
 | POST | `/agent-runs/{run}/release` | Start a held run. Requester only; 409 unless held. |
 | POST | `/agent-runs/{run}/retry` | Queue a failed run again. Requester only, since the run executes with their access; 409 unless failed. |
@@ -96,6 +96,45 @@ Post agent prompts through this endpoint rather than the conversations message e
 ## Render tools
 
 `render_markdown`, `render_table`, `render_kpi`, `render_chart`, `render_callout`, `render_timeline`, `render_progress`, `ask_question`, `open_canvas`, `update_canvas`. They carry the read permission because drawing changes no data. Each validates its input and returns an error to the agent, drawing nothing, when the input is unusable.
+
+## Questions
+
+`ask_question` draws a question block. Each question and option has an id, so the answer can be sent back and shown with the question later:
+
+```json
+{
+  "type": "question",
+  "id": "week",
+  "prompt": "Which week?",
+  "options": [
+    { "id": "this-week", "label": "This week", "message": "This week" },
+    { "id": "last-week", "label": "Last week", "message": "Last week" }
+  ],
+  "multiple": false,
+  "write_in": "Another week",
+  "why": "The report covers one week.",
+  "recommended": "this-week"
+}
+```
+
+- `id` is generated (`q_` and a ULID) when the agent gives none. Option ids come from their labels unless given.
+- `multiple` allows several options. `write_in` is `false`, `true`, or the label of a box for an answer in the person's own words.
+- `why` and `recommended` (an option id) are left out when not set.
+- `label` and `message` stay on each option, so a client that sends the option's `message` as the next prompt keeps working.
+
+A tool of yours can file a question it got from elsewhere with `BlockCollector::add(['type' => 'question', ...])` in the same shape; it is given ids the same way.
+
+To answer, send `answers` with the next prompt, keyed by question id. Each value is an option id, a list of option ids (for a `multiple` question), or text (when the question has `write_in`). `body` may then be left out:
+
+```json
+{ "body": "Here you go", "answers": { "week": "last-week", "projects": ["shop", "harbor"] } }
+```
+
+Answers are checked against the questions in the conversation's latest reply that asked any. An unknown question id or an answer that does not fit is refused with 422. They are stored on the prompt message's `metadata.answers`, beside `metadata.answers_to_message_id` (the reply that asked), and shown on the run as `answers`. The agent reads them after the prompt, each with the question it settles.
+
+Stored reply blocks never change. When a run is read, each question block in its reply gets `answer` (`{"options": ["last-week"], "text": null}`, or null) and `answered_by_message_id` (the prompt message that answered it first, or null).
+
+## Your own blocks
 
 Your own tools add blocks with `BlockCollector::add()`. A type outside the core list must be listed in `agent-chat.block_types`. Point such blocks at your records with a `ref` rather than copying the record into the block.
 

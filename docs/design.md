@@ -112,6 +112,12 @@ as the existing model, request, resource and controller settings.
 Core types: `markdown`, `table`, `kpi`, `chart`, `callout`, `timeline`,
 `progress`, `question`, `image`, `canvas`.
 
+- `question`: `id`, `prompt`, `options` (each `id`, `label`, `message`),
+  `multiple`, `write_in` (false, true or a label) and optional `why` and
+  `recommended` (an option id). Ids are generated when not given, so a
+  question can be answered by id. Answers are sent with the next prompt,
+  stored on that prompt message, and joined to the question when the reply is
+  read; the stored block never changes.
 - `image`: `src`, `alt`, optional `attachment` index and `ref`.
 - `canvas`: a titled document that gathers the blocks one run drew. A later run
   can edit it and it can be exported.
@@ -163,7 +169,7 @@ clients that poll or reconnect.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/conversations/{conversation}/agent-runs` | Post a prompt (`body`, `attachments`, `language`, `options`, `harness`) and start or hold a run. |
+| POST | `/conversations/{conversation}/agent-runs` | Post a prompt (`body`, `attachments`, `answers`, `language`, `options`, `harness`) and start or hold a run. |
 | GET | `/agent-runs` | List runs the user can reach, filtered by conversation and status. |
 | GET | `/agent-runs/{run}` | A run with its current attempt and reply. |
 | GET | `/agent-runs/{run}/attempts` | The attempt history. |

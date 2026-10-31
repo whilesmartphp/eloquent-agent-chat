@@ -4,6 +4,7 @@ namespace Whilesmart\AgentChat\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Whilesmart\AgentChat\Blocks\QuestionAnswers;
 
 class AgentRunResource extends JsonResource
 {
@@ -22,10 +23,11 @@ class AgentRunResource extends JsonResource
             'options' => $this->options ?? (object) [],
             'progress' => $this->progress ?? [],
             'error' => $this->error,
+            'answers' => $this->promptMessage?->metadata['answers'] ?? null,
             'reply' => $this->whenLoaded('replyMessage', fn () => $this->replyMessage === null ? null : [
                 'id' => $this->replyMessage->getKey(),
                 'body' => $this->replyMessage->body,
-                'blocks' => $this->blocks(),
+                'blocks' => app(QuestionAnswers::class)->annotate($this->resource, $this->blocks()),
                 'attachments' => $this->replyMessage->attachments ?? [],
             ]),
             'current_attempt' => $this->whenLoaded('currentAttempt', fn () => $this->currentAttempt === null

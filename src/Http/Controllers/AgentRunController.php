@@ -36,7 +36,7 @@ class AgentRunController extends ApiController
             $query->where('status', $request->input('status'));
         }
 
-        $runs = $query->with(['replyMessage', 'currentAttempt'])->latest('id')->paginate((int) $request->input('per_page', 20));
+        $runs = $query->with(['promptMessage', 'replyMessage', 'currentAttempt'])->latest('id')->paginate((int) $request->input('per_page', 20));
 
         return $this->success($this->resourceClass()::collection($runs)->response()->getData(true));
     }
@@ -45,7 +45,7 @@ class AgentRunController extends ApiController
     {
         $this->authorizeAccessTo($agentRun, $request->user());
 
-        return $this->success($this->resource($agentRun->load(['replyMessage', 'currentAttempt'])));
+        return $this->success($this->resource($agentRun->load(['promptMessage', 'replyMessage', 'currentAttempt'])));
     }
 
     public function attempts(Request $request, AgentRun $agentRun): JsonResponse
@@ -79,6 +79,7 @@ class AgentRunController extends ApiController
                 'direction' => MessageDirection::Inbound,
                 'body' => $request->validated('body'),
                 'attachments' => $request->attachments(),
+                'metadata' => $request->promptMetadata(),
             ]);
 
             $model = config('agent-chat.model', AgentRun::class);

@@ -21,11 +21,23 @@ class BlockCollector
 
     /**
      * Add a block. Its type must be a core type or one listed under
-     * `agent-chat.block_types`.
+     * `agent-chat.block_types`. A question block is normalized to the same
+     * shape `ask_question` draws, so it gets ids and can be answered.
      *
      * @param  array<string, mixed>  $block
      */
     public function add(array $block): void
+    {
+        $this->blocks[] = self::normalize($block);
+    }
+
+    /**
+     * Check a block's type and return it in its stored shape.
+     *
+     * @param  array<string, mixed>  $block
+     * @return array<string, mixed>
+     */
+    public static function normalize(array $block): array
     {
         $type = $block['type'] ?? null;
 
@@ -33,7 +45,12 @@ class BlockCollector
             throw new InvalidArgumentException('Block type '.json_encode($type).' is not registered. Add it to agent-chat.block_types.');
         }
 
-        $this->blocks[] = $block;
+        if ($type !== 'question') {
+            return $block;
+        }
+
+        return app(BlockBuilder::class)->questionFrom($block)
+            ?? throw new InvalidArgumentException('A question block needs a prompt and at least one option.');
     }
 
     /**

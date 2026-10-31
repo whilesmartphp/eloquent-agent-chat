@@ -203,15 +203,14 @@ class AgentRunApiTest extends TestCase
             ->postJson("/api/conversations/{$this->conversation()->id}/agent-runs", ['body' => 'Report'])
             ->json('data.id');
 
-        $this->getJson("/api/agent-runs/{$id}")
-            ->assertJsonPath('data.reply.blocks', [[
-                'type' => 'question',
-                'prompt' => 'Which week?',
-                'options' => [
-                    ['label' => 'This week', 'message' => 'This week'],
-                    ['label' => 'Last week', 'message' => 'Last week'],
-                ],
-            ]]);
+        $block = $this->getJson("/api/agent-runs/{$id}")->assertJsonCount(1, 'data.reply.blocks')->json('data.reply.blocks.0');
+
+        $this->assertSame('question', $block['type']);
+        $this->assertSame('Which week?', $block['prompt']);
+        $this->assertSame([
+            ['id' => 'this-week', 'label' => 'This week', 'message' => 'This week'],
+            ['id' => 'last-week', 'label' => 'Last week', 'message' => 'Last week'],
+        ], $block['options']);
     }
 
     #[Test]
