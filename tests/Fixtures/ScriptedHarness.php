@@ -24,6 +24,12 @@ class ScriptedHarness implements StreamingHarness
     /** @var array<int, mixed> */
     public array $toolResults = [];
 
+    /** @var array<int, array<int, mixed>> */
+    public array $media = [];
+
+    /** @var array<int, array<string, mixed>> */
+    public array $overrides = [];
+
     private Closure $script;
 
     public function __construct(private string $harnessName = 'assistant')
@@ -32,7 +38,7 @@ class ScriptedHarness implements StreamingHarness
     }
 
     /**
-     * @param  Closure(callable(string, array<string, mixed>): mixed, string, ToolContext): AgentResult  $script
+     * @param  Closure(callable(string, array<string, mixed>): mixed, string, ToolContext, array<string, mixed>): AgentResult  $script
      */
     public function script(Closure $script): static
     {
@@ -90,6 +96,8 @@ class ScriptedHarness implements StreamingHarness
     {
         $this->inputs[] = $input;
         $this->contexts[] = $context;
+        $this->media[] = $media;
+        $this->overrides[] = $overrides;
 
         $call = function (string $tool, array $arguments = []) use ($onEvent, $context) {
             $onEvent(AgentStreamEvent::toolCall($tool, $arguments));
@@ -100,6 +108,6 @@ class ScriptedHarness implements StreamingHarness
             return $result;
         };
 
-        return ($this->script)($call, $input, $context);
+        return ($this->script)($call, $input, $context, $overrides);
     }
 }

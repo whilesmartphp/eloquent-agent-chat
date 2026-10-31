@@ -80,7 +80,8 @@ Messages carry attachments in the `attachments` column of
 - A file is located by `url`, or by `disk` and `path`. `ref` points at a host
   record, such as a stored asset, without the package knowing its model.
 - Prompt attachments are validated against this shape and stored on the prompt
-  message.
+  message. The media resolver fetches them on the server, so a person may only
+  attach files from hosts and disks the host app allows.
 - Files the agent produces are attached to the reply message as well as shown
   as blocks, so channels that send media (MMS, email) deliver them.
 

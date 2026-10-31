@@ -16,7 +16,7 @@ class OpenCanvasTool extends AbstractRenderTool
     {
         return 'Start a canvas document for a report or any answer with several sections. Call it first with '
             .'a title, then call the render tools in the order the content should appear. Everything rendered '
-            .'afterwards in this turn becomes one document.';
+            .'afterwards in this answer becomes one document.';
     }
 
     public function parameters(): array

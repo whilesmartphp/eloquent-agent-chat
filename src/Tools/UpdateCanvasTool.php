@@ -2,13 +2,13 @@
 
 namespace Whilesmart\AgentChat\Tools;
 
-use Whilesmart\AgentChat\Turns\ConversationCanvas;
+use Whilesmart\AgentChat\Runs\ConversationCanvas;
 use Whilesmart\Agents\ValueObjects\ParameterSpec;
 use Whilesmart\Agents\ValueObjects\ToolContext;
 
 /**
  * Edits the latest canvas in the conversation. It opens a new canvas for this
- * turn and returns the previous sections so the agent rebuilds them with the
+ * run and returns the previous sections so the agent rebuilds them with the
  * change applied, instead of starting from a blank page.
  */
 class UpdateCanvasTool extends AbstractRenderTool

@@ -11,10 +11,10 @@ use Tests\Fixtures\ScriptedHarness;
 use Tests\TestCase;
 use Whilesmart\AgentChat\AgentChatServiceProvider;
 use Whilesmart\AgentChat\Contracts\ResponseFormatter;
-use Whilesmart\AgentChat\Contracts\TurnInputBuilder;
-use Whilesmart\AgentChat\Events\AgentTurnUpdated;
-use Whilesmart\AgentChat\Http\Resources\AgentTurnResource;
-use Whilesmart\AgentChat\Models\AgentTurn;
+use Whilesmart\AgentChat\Contracts\RunInputBuilder;
+use Whilesmart\AgentChat\Events\AgentRunUpdated;
+use Whilesmart\AgentChat\Http\Resources\AgentRunResource;
+use Whilesmart\AgentChat\Models\AgentRun;
 use Whilesmart\Agents\Facades\Agents;
 use Whilesmart\Agents\ValueObjects\AgentResult;
 
@@ -24,45 +24,45 @@ class CustomizationTest extends TestCase
     public function a_configured_resource_and_response_formatter_shape_the_response(): void
     {
         config([
-            'agent-chat.resources.turn' => CompactTurnResource::class,
+            'agent-chat.resources.run' => CompactRunResource::class,
             'agent-chat.response_formatter' => BareFormatter::class,
         ]);
 
         $this->actingAs($this->user())
-            ->postJson("/api/conversations/{$this->conversation()->id}/agent-turns", ['body' => 'Hi'])
+            ->postJson("/api/conversations/{$this->conversation()->id}/agent-runs", ['body' => 'Hi'])
             ->assertStatus(202)
-            ->assertExactJson(['turn' => ['state' => 'completed']]);
+            ->assertExactJson(['run' => ['state' => 'completed']]);
     }
 
     #[Test]
     public function a_configured_input_builder_decides_what_the_agent_reads(): void
     {
-        $this->app->bind(TurnInputBuilder::class, fn () => new class implements TurnInputBuilder
+        $this->app->bind(RunInputBuilder::class, fn () => new class implements RunInputBuilder
         {
-            public function build(AgentTurn $turn): string
+            public function build(AgentRun $run): string
             {
-                return 'Workspace context. '.$turn->promptMessage->body;
+                return 'Workspace context. '.$run->promptMessage->body;
             }
         });
 
         $this->actingAs($this->user())
-            ->postJson("/api/conversations/{$this->conversation()->id}/agent-turns", ['body' => 'Hi']);
+            ->postJson("/api/conversations/{$this->conversation()->id}/agent-runs", ['body' => 'Hi']);
 
         $this->assertSame(['Workspace context. Hi'], $this->harness->inputs);
     }
 
     #[Test]
-    public function a_listed_harness_can_be_picked_per_turn(): void
+    public function a_listed_harness_can_be_picked_per_run(): void
     {
         config(['agent-chat.harnesses' => ['reporter']]);
         $reporter = (new ScriptedHarness('reporter'))->script(fn () => AgentResult::success('From the reporter.'));
         Agents::registerHarness('reporter', $reporter);
 
         $id = $this->actingAs($this->user())
-            ->postJson("/api/conversations/{$this->conversation()->id}/agent-turns", ['body' => 'Hi', 'harness' => 'reporter'])
+            ->postJson("/api/conversations/{$this->conversation()->id}/agent-runs", ['body' => 'Hi', 'harness' => 'reporter'])
             ->json('data.id');
 
-        $this->getJson("/api/agent-turns/{$id}")
+        $this->getJson("/api/agent-runs/{$id}")
             ->assertJsonPath('data.harness', 'reporter')
             ->assertJsonPath('data.reply.body', 'From the reporter.');
         $this->assertSame([], $this->harness->inputs);
@@ -80,17 +80,17 @@ class CustomizationTest extends TestCase
         });
 
         $id = $this->actingAs($this->user())
-            ->postJson("/api/conversations/{$this->conversation()->id}/agent-turns", ['body' => 'Hi'])
+            ->postJson("/api/conversations/{$this->conversation()->id}/agent-runs", ['body' => 'Hi'])
             ->json('data.id');
 
-        $this->getJson("/api/agent-turns/{$id}")->assertJsonPath('data.progress', ['Drawing']);
+        $this->getJson("/api/agent-runs/{$id}")->assertJsonPath('data.progress', [['label' => 'Drawing', 'state' => 'done']]);
     }
 
     #[Test]
-    public function turns_broadcast_start_progress_and_settle_when_enabled(): void
+    public function runs_broadcast_start_progress_and_settle_when_enabled(): void
     {
         config(['agent-chat.broadcast.enabled' => true]);
-        Event::fake([AgentTurnUpdated::class]);
+        Event::fake([AgentRunUpdated::class]);
 
         $this->harness->script(function (callable $call) {
             $call('render_markdown', ['text' => 'x']);
@@ -99,26 +99,26 @@ class CustomizationTest extends TestCase
         });
 
         $conversation = $this->conversation();
-        $this->actingAs($this->user())->postJson("/api/conversations/{$conversation->id}/agent-turns", ['body' => 'Hi']);
+        $this->actingAs($this->user())->postJson("/api/conversations/{$conversation->id}/agent-runs", ['body' => 'Hi']);
 
         $kinds = [];
-        Event::assertDispatched(AgentTurnUpdated::class, function (AgentTurnUpdated $event) use (&$kinds, $conversation) {
+        Event::assertDispatched(AgentRunUpdated::class, function (AgentRunUpdated $event) use (&$kinds, $conversation) {
             $kinds[] = [$event->kind, $event->label];
 
             return $event->broadcastOn()[0]->name === "private-agent-chat.conversation.{$conversation->id}";
         });
-        $this->assertSame([['started', null], ['progress', 'Putting it together'], ['settled', null]], $kinds);
+        $this->assertSame([['started', null], ['progress', 'Putting it together'], ['progress', 'Putting it together'], ['settled', null]], $kinds);
     }
 
     #[Test]
     public function nothing_is_broadcast_by_default(): void
     {
-        Event::fake([AgentTurnUpdated::class]);
+        Event::fake([AgentRunUpdated::class]);
 
         $this->actingAs($this->user())
-            ->postJson("/api/conversations/{$this->conversation()->id}/agent-turns", ['body' => 'Hi']);
+            ->postJson("/api/conversations/{$this->conversation()->id}/agent-runs", ['body' => 'Hi']);
 
-        Event::assertNotDispatched(AgentTurnUpdated::class);
+        Event::assertNotDispatched(AgentRunUpdated::class);
     }
 
     #[Test]
@@ -144,7 +144,7 @@ class CustomizationTest extends TestCase
     }
 }
 
-class CompactTurnResource extends AgentTurnResource
+class CompactRunResource extends AgentRunResource
 {
     public function toArray(Request $request): array
     {
@@ -156,7 +156,7 @@ class BareFormatter implements ResponseFormatter
 {
     public function success(mixed $data = null, int $statusCode = 200, ?string $message = null): JsonResponse
     {
-        return response()->json(['turn' => $data], $statusCode);
+        return response()->json(['run' => $data], $statusCode);
     }
 
     public function failure(string $message, int $statusCode = 400, array $errors = []): JsonResponse
