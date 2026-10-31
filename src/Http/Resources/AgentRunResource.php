@@ -22,6 +22,7 @@ class AgentRunResource extends JsonResource
             'language' => $this->language,
             'options' => $this->options ?? (object) [],
             'progress' => $this->progress ?? [],
+            'draft' => $this->draft,
             'error' => $this->error,
             'answers' => $this->promptMessage?->metadata['answers'] ?? null,
             'reply' => $this->whenLoaded('replyMessage', fn () => $this->replyMessage === null ? null : [

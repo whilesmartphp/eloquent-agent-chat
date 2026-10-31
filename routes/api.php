@@ -4,7 +4,7 @@ use Illuminate\Support\Facades\Route;
 
 $controller = config('agent-chat.controller');
 $writeMiddleware = config('agent-chat.route_write_middleware', []);
-$actions = config('agent-chat.route_actions', ['index', 'show', 'attempts', 'store', 'release', 'retry', 'cancel', 'export']);
+$actions = config('agent-chat.route_actions', ['index', 'show', 'attempts', 'events', 'store', 'release', 'retry', 'cancel', 'export']);
 
 if (in_array('index', $actions, true)) {
     Route::get('agent-runs', [$controller, 'index']);
@@ -14,6 +14,9 @@ if (in_array('show', $actions, true)) {
 }
 if (in_array('attempts', $actions, true)) {
     Route::get('agent-runs/{agentRun}/attempts', [$controller, 'attempts']);
+}
+if (in_array('events', $actions, true)) {
+    Route::get('agent-runs/{agentRun}/events', [$controller, 'events']);
 }
 if (in_array('store', $actions, true)) {
     Route::post('conversations/{conversation}/agent-runs', [$controller, 'store'])->middleware($writeMiddleware);

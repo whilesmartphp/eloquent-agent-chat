@@ -38,7 +38,7 @@ return [
     'route_prefix' => env('AGENT_CHAT_ROUTE_PREFIX', 'api'),
     'route_middleware' => ['api', 'auth:sanctum'],
     'route_write_middleware' => [],
-    'route_actions' => ['index', 'show', 'attempts', 'store', 'release', 'retry', 'cancel', 'export'],
+    'route_actions' => ['index', 'show', 'attempts', 'events', 'store', 'release', 'retry', 'cancel', 'export'],
     'controller' => AgentRunController::class,
 
     'requests' => [
@@ -111,6 +111,16 @@ return [
         'list_*' => 'Looking through your records',
         'search_*' => 'Searching',
         'calculator' => 'Working out the figures',
+    ],
+
+    // The live draft of a reply is saved at most once per draft_throttle_ms
+    // while the agent writes; text and block broadcasts follow the same pace.
+    // GET agent-runs/{run}/events polls the run every poll_ms and closes
+    // after max_seconds, when the client should reconnect.
+    'streaming' => [
+        'draft_throttle_ms' => (int) env('AGENT_CHAT_DRAFT_THROTTLE_MS', 250),
+        'poll_ms' => (int) env('AGENT_CHAT_EVENTS_POLL_MS', 500),
+        'max_seconds' => (int) env('AGENT_CHAT_EVENTS_MAX_SECONDS', 120),
     ],
 
     // Push run updates to a private channel as they happen. The stored run

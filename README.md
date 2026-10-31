@@ -84,14 +84,41 @@ Routes use the configured prefix (default `api`) and middleware (default `['api'
 |---|---|---|
 | POST | `/conversations/{conversation}/agent-runs` | Post a prompt as the signed-in user: `body`, `attachments` and/or `answers`, plus optional `harness` (from `agent-chat.harnesses`), `language`, `options` and `hold`. Returns 202. |
 | GET | `/agent-runs` | List runs the user can reach. Filter by `conversation_id` and `status`. |
-| GET | `/agent-runs/{run}` | Status, progress, error, the answers the prompt sent, the current attempt and the reply with its blocks and attachments. |
+| GET | `/agent-runs/{run}` | Status, progress, the live `draft`, error, the answers the prompt sent, the current attempt and the reply with its blocks and attachments. |
 | GET | `/agent-runs/{run}/attempts` | Every attempt in order. |
+| GET | `/agent-runs/{run}/events` | A server-sent events stream of the run until it settles. See below. |
 | POST | `/agent-runs/{run}/release` | Start a held run. Requester only; 409 unless held. |
 | POST | `/agent-runs/{run}/retry` | Queue a failed run again. Requester only, since the run executes with their access; 409 unless failed. |
 | POST | `/agent-runs/{run}/cancel` | Cancel a run that has not settled. Requester only; 409 once settled. |
 | GET | `/agent-runs/{run}/export?format=md` | Download the run's canvas. 404 when there is none. |
 
 Post agent prompts through this endpoint rather than the conversations message endpoint. That endpoint accepts an author from the request body, and the agent acts with its author's access.
+
+## Live draft
+
+While a run works, the reply it is writing is kept on the run as `draft`:
+
+```json
+{ "attempt_id": 3, "text": "Here is the week so far", "blocks": [{ "type": "kpi", "items": [] }] }
+```
+
+`text` is the text the model has streamed so far and `blocks` are the blocks drawn so far, in order. The draft is saved at most once per `streaming.draft_throttle_ms` (250 by default), and right away when a tool starts or finishes. A new attempt starts a new draft. The draft is cleared when the reply is published or the run fails or is cancelled. The reply message is still created once, when the run completes, so channels such as SMS and email only ever get the finished answer.
+
+## Events stream
+
+`GET /agent-runs/{run}/events` answers with `text/event-stream` for anyone who can see the run. It polls the stored run every `streaming.poll_ms` (500 by default) and sends only what changed. Each event's `data` is JSON:
+
+| Event | Data |
+|---|---|
+| `started` | `{run_id, status, harness, started_at}`, once the run has started. |
+| `progress` | `{steps}`: every step, sent whenever they change. |
+| `text` | `{text}`: the whole text so far, not a delta, so a client always shows the latest one. |
+| `block` | `{index, block}`: one event per new block in the draft. |
+| `reset` | `{attempt_id}`: a new attempt started over; drop the text and blocks shown so far. |
+| `settled` | `{status, reply_message_id, error}`: the run is completed, failed or cancelled. The stream ends. Fetch the run for the reply. |
+| `timeout` | `{status}`: `streaming.max_seconds` (120 by default) passed first. The stream ends; connect again to keep following. |
+
+Each open stream holds a PHP worker while it polls, so size your web workers for it, or follow runs by broadcasting instead.
 
 ## Render tools
 
@@ -163,7 +190,7 @@ Each step in `progress` is `{label, state}` with `state` set to `running`, `done
 | `AgentRunFailed` | The run ends without a reply. |
 | `AgentRunCancelled` | The requester cancels the run. |
 
-With `agent-chat.broadcast.enabled`, `AgentRunUpdated` is also broadcast on `private-agent-chat.conversation.{id}` with `kind` set to `started`, `progress` or `settled`. Authorize that channel in your `routes/channels.php`.
+With `agent-chat.broadcast.enabled`, `AgentRunUpdated` is also broadcast on `private-agent-chat.conversation.{id}` with `kind` set to `started`, `progress`, `text`, `block` or `settled`. `text` and `block` are sent when the draft is saved, so they follow the same throttle; fetch the run for the draft itself. Authorize that channel in your `routes/channels.php`.
 
 ## Customization
 
@@ -180,6 +207,7 @@ Everything below is set in `config/agent-chat.php` (`php artisan vendor:publish 
 - `attachments`: `max`, `url_hosts` and `disks`
 - `tools`, `register_tools` and `block_types`
 - `progress_labels`: step labels keyed by tool name pattern
+- `streaming`: `draft_throttle_ms`, and `poll_ms` and `max_seconds` for the events stream
 - `exporters`: one `CanvasExporter` per format
 - `queue`: connection, queue, tries, timeout and backoff (seconds between tries)
 

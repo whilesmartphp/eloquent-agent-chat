@@ -2,6 +2,7 @@
 
 namespace Whilesmart\AgentChat\Blocks;
 
+use Closure;
 use InvalidArgumentException;
 use Whilesmart\AgentChat\Attachments\Attachment;
 
@@ -20,6 +21,11 @@ class BlockCollector
     private ?string $canvasTitle = null;
 
     /**
+     * @param  (Closure(array<int, array<string, mixed>>): void)|null  $onChange  Called with every block so far after one is added.
+     */
+    public function __construct(private ?Closure $onChange = null) {}
+
+    /**
      * Add a block. Its type must be a core type or one listed under
      * `agent-chat.block_types`. A question block is normalized to the same
      * shape `ask_question` draws, so it gets ids and can be answered.
@@ -29,6 +35,10 @@ class BlockCollector
     public function add(array $block): void
     {
         $this->blocks[] = self::normalize($block);
+
+        if ($this->onChange !== null) {
+            ($this->onChange)($this->blocks);
+        }
     }
 
     /**

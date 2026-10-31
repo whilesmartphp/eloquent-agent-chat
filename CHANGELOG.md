@@ -8,6 +8,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- The reply streams while the run works. The run keeps a draft of the text and blocks so far, saved at a throttled rate and cleared when the run settles. The reply message is still created once, when the run completes. Run the new migration to add the draft column.
+- An events stream per run that sends its start, steps, text, blocks and settlement as server-sent events.
+- Text and block updates on the broadcast channel, paced like the draft.
 - Questions keep an id, and so do their options. A question can allow several answers, take an answer in the person's own words, say why it is asked and recommend an option. Options still carry their label and message, so existing clients keep working.
 - Host tools can add question blocks directly, in the same shape.
 - A prompt can answer the latest questions by id. Answers are checked against those questions, stored with the prompt, shown with each question when its run is read, and given to the agent with the prompt.

@@ -24,6 +24,7 @@ class AgentRun extends Model
         'status' => AgentRunStatus::class,
         'options' => 'array',
         'progress' => 'array',
+        'draft' => 'array',
         'queued_at' => 'datetime',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',

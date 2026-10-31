@@ -33,8 +33,9 @@ use Whilesmart\OwnerAccess\Contracts\OwnerAuthorizer;
 
 /**
  * Executes a claimed run: tries each provider in the plan as an attempt,
- * records progress as tools run, and posts the reply to the conversation as
- * a message whose metadata holds the blocks.
+ * records progress as tools run, keeps a live draft of the reply as it
+ * streams, and posts the reply to the conversation as a message whose
+ * metadata holds the blocks.
  */
 class RunExecutor
 {
@@ -109,7 +110,8 @@ class RunExecutor
             }
 
             $attempt = $this->openAttempt($run, $candidate);
-            $collector = new BlockCollector;
+            $draft = $this->draftFor($run, $attempt);
+            $collector = new BlockCollector(fn (array $blocks) => $draft->blocks($blocks));
             $progress = $this->progressFor($run);
             app()->instance(BlockCollector::class, $collector);
             app()->instance(RunProgress::class, $progress);
@@ -119,7 +121,7 @@ class RunExecutor
                     $run->harness,
                     $input,
                     $this->context($run, $attempt),
-                    fn (AgentStreamEvent $event) => $this->track($progress, $event),
+                    fn (AgentStreamEvent $event) => $this->track($progress, $draft, $event),
                     $media,
                     array_filter($candidate, fn ($value) => $value !== null),
                 );
@@ -152,7 +154,7 @@ class RunExecutor
         }
 
         if (! $finalTry && $this->stillOurs($run)) {
-            $run->forceFill(['status' => AgentRunStatus::Queued, 'started_at' => null, 'progress' => null, 'error' => $error])->save();
+            $run->forceFill(['status' => AgentRunStatus::Queued, 'started_at' => null, 'progress' => null, 'draft' => null, 'error' => $error])->save();
 
             return false;
         }
@@ -177,6 +179,7 @@ class RunExecutor
                 'status' => AgentRunStatus::Failed->value,
                 'error' => $error,
                 'progress' => $steps === [] ? null : json_encode($steps),
+                'draft' => null,
                 'completed_at' => now(),
             ]);
 
@@ -202,7 +205,7 @@ class RunExecutor
         $cancelled = $model::query()
             ->whereKey($run->getKey())
             ->whereIn('status', AgentRunStatus::unsettledValues())
-            ->update(['status' => AgentRunStatus::Cancelled->value, 'completed_at' => now()]);
+            ->update(['status' => AgentRunStatus::Cancelled->value, 'draft' => null, 'completed_at' => now()]);
 
         if ($cancelled !== 1) {
             return false;
@@ -234,7 +237,7 @@ class RunExecutor
                 ->where('status', AgentRunStatus::Running->value)
                 ->where('current_attempt_id', $attempt->getKey())
                 ->whereNull('reply_message_id')
-                ->update(['status' => AgentRunStatus::Completed->value, 'error' => null, 'completed_at' => now()]);
+                ->update(['status' => AgentRunStatus::Completed->value, 'error' => null, 'draft' => null, 'completed_at' => now()]);
 
             if ($won !== 1) {
                 return false;
@@ -309,7 +312,7 @@ class RunExecutor
             'started_at' => now(),
         ]);
 
-        $run->forceFill(['current_attempt_id' => $attempt->getKey(), 'progress' => null])->save();
+        $run->forceFill(['current_attempt_id' => $attempt->getKey(), 'progress' => null, 'draft' => null])->save();
 
         return $attempt;
     }
@@ -362,8 +365,31 @@ class RunExecutor
         });
     }
 
-    private function track(RunProgress $progress, AgentStreamEvent $event): void
+    private function draftFor(AgentRun $run, AgentRunAttempt $attempt): RunDraft
     {
+        return new RunDraft($run, $attempt->getKey(), onSave: function (array $kinds) use ($run) {
+            foreach ($kinds as $kind) {
+                $this->broadcast($run, $kind);
+            }
+        });
+    }
+
+    /**
+     * Text deltas grow the draft. A tool call or step boundary saves what is
+     * pending first, since the next event may be a while away.
+     */
+    private function track(RunProgress $progress, RunDraft $draft, AgentStreamEvent $event): void
+    {
+        if ($event->type === StreamEventType::TextDelta) {
+            $draft->append((string) $event->text);
+
+            return;
+        }
+
+        if (in_array($event->type, [StreamEventType::ToolCall, StreamEventType::ToolResult, StreamEventType::StepFinish], true)) {
+            $draft->flush();
+        }
+
         if ($event->toolName === null || ($label = $this->labels->for($event->toolName)) === null) {
             return;
         }
@@ -428,7 +454,7 @@ class RunExecutor
         return app('agents');
     }
 
-    private function broadcast(AgentRun $run, string $kind, ?string $label = null): void
+    public function broadcast(AgentRun $run, string $kind, ?string $label = null): void
     {
         if (! config('agent-chat.broadcast.enabled', false)) {
             return;

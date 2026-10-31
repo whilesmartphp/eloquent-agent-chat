@@ -6,12 +6,14 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Whilesmart\AgentChat\Enums\AgentRunStatus;
 use Whilesmart\AgentChat\Enums\ConcurrencyPolicy;
 use Whilesmart\AgentChat\Export\CanvasExporters;
 use Whilesmart\AgentChat\Http\Requests\StoreAgentRunRequest;
 use Whilesmart\AgentChat\Models\AgentRun;
 use Whilesmart\AgentChat\Runs\RunDispatcher;
+use Whilesmart\AgentChat\Runs\RunEventStream;
 use Whilesmart\AgentChat\Runs\RunExecutor;
 use Whilesmart\Conversations\Enums\MessageDirection;
 use Whilesmart\Conversations\Enums\MessageType;
@@ -55,6 +57,35 @@ class AgentRunController extends ApiController
         $attempts = $agentRun->attempts()->orderBy('number')->get();
 
         return $this->success($this->resourceClass('attempt')::collection($attempts)->resolve($request));
+    }
+
+    /**
+     * Server-sent events for one run, until it settles or the stream's time
+     * is up. Each event's data is JSON.
+     */
+    public function events(Request $request, AgentRun $agentRun, RunEventStream $stream): StreamedResponse
+    {
+        $this->authorizeAccessTo($agentRun, $request->user());
+
+        return new StreamedResponse(function () use ($stream, $agentRun) {
+            foreach ($stream->events($agentRun) as [$event, $data]) {
+                echo "event: {$event}\ndata: ".json_encode($data, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."\n\n";
+
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
+
+                flush();
+
+                if (connection_aborted()) {
+                    return;
+                }
+            }
+        }, 200, [
+            'Content-Type' => 'text/event-stream',
+            'Cache-Control' => 'no-cache',
+            'X-Accel-Buffering' => 'no',
+        ]);
     }
 
     /**
@@ -123,6 +154,7 @@ class AgentRunController extends ApiController
         return $this->requeue($request, $agentRun, AgentRunStatus::Failed, 'Only a failed run can be retried.', [
             'error' => null,
             'progress' => null,
+            'draft' => null,
             'queued_at' => now(),
             'started_at' => null,
             'completed_at' => null,

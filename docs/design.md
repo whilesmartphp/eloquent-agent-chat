@@ -125,6 +125,24 @@ Core types: `markdown`, `table`, `kpi`, `chart`, `callout`, `timeline`,
   validates. Blocks that point at host records carry a `ref` and are resolved
   by the client; the block never becomes a second copy of the record's state.
 
+## Draft
+
+The answer streams while the run works, without becoming a message early.
+The executor keeps a draft on the run: the text deltas the harness streams,
+joined, and the blocks tools have drawn so far. It is saved on the run row at
+most once per configured interval, and at once when a tool starts or
+finishes, and only while the run is running and the attempt still holds the
+claim. A new attempt starts a new draft.
+
+The draft is not a message. Rule 3 still holds: the reply is created once,
+in the transaction that completes the run, and the draft is cleared in that
+same update. A failed or cancelled run clears it too, so a partial answer is
+visible to the person watching but never delivered to a channel.
+
+Clients read the draft on the run, follow it on the events stream, which
+polls the run row, or hear `text` and `block` broadcasts paced like the
+saves.
+
 ## Schema
 
 `agent_runs`
@@ -140,6 +158,7 @@ Core types: `markdown`, `table`, `kpi`, `chart`, `callout`, `timeline`,
 | `language` | Nullable locale code. |
 | `options` | JSON run options. |
 | `progress` | JSON list of steps for clients: `label`, `state` (`running`, `done`, `failed`) and an optional `detail`. A failed attempt marks its running step failed; a completed run marks any running step done. |
+| `draft` | Nullable JSON: the reply being written, `attempt_id`, `text` and `blocks`. Saved at a throttled rate while running; cleared on settle. |
 | `current_attempt_id` | The attempt allowed to publish. |
 | `error` | The latest failure, for clients. |
 | `queued_at`, `started_at`, `completed_at`, timestamps, soft deletes | |
@@ -161,8 +180,9 @@ Core types: `markdown`, `table`, `kpi`, `chart`, `callout`, `timeline`,
 
 `AgentRunQueued`, `AgentRunStarted`, `AgentRunProgressed`,
 `AgentRunAttemptFailed`, `AgentRunCompleted`, `AgentRunFailed`,
-`AgentRunCancelled`. When broadcasting is on, a compact update is sent on the
-conversation's private channel; the stored run stays the source of truth for
+`AgentRunCancelled`. When broadcasting is on, a compact update (`started`,
+`progress`, `text`, `block`, `settled`) is sent on the conversation's private
+channel; the stored run stays the source of truth for
 clients that poll or reconnect.
 
 ## HTTP
@@ -173,6 +193,7 @@ clients that poll or reconnect.
 | GET | `/agent-runs` | List runs the user can reach, filtered by conversation and status. |
 | GET | `/agent-runs/{run}` | A run with its current attempt and reply. |
 | GET | `/agent-runs/{run}/attempts` | The attempt history. |
+| GET | `/agent-runs/{run}/events` | Server-sent events: `started`, `progress`, `text`, `block`, `reset`, then `settled` or `timeout`. |
 | POST | `/agent-runs/{run}/release` | Start a held run. |
 | POST | `/agent-runs/{run}/retry` | Requester only; failed runs only. |
 | POST | `/agent-runs/{run}/cancel` | Requester only; unsettled runs only. |
@@ -184,6 +205,4 @@ clients that poll or reconnect.
 - Running harnesses, tools and providers: `eloquent-agents`.
 - Billing ledgers: `eloquent-agent-metrics`; usage is linked per attempt.
 - Proposals and approvals: `eloquent-agent-actions`; blocks reference them.
-- Streaming answer text token by token. Progress steps cover the wait; a
-  streamed draft can be added later as attempt state outside messages.
 - Branching and regenerating earlier answers in place.

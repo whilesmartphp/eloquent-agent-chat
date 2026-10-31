@@ -107,7 +107,7 @@ class CustomizationTest extends TestCase
 
             return $event->broadcastOn()[0]->name === "private-agent-chat.conversation.{$conversation->id}";
         });
-        $this->assertSame([['started', null], ['progress', 'Putting it together'], ['progress', 'Putting it together'], ['settled', null]], $kinds);
+        $this->assertSame([['started', null], ['progress', 'Putting it together'], ['block', null], ['progress', 'Putting it together'], ['settled', null]], $kinds);
     }
 
     #[Test]
