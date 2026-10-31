@@ -18,7 +18,7 @@ produces (designs, reports, invoices); it references them.
 | Output | The reply message. Its body is the narration; `metadata.blocks` holds typed blocks; `attachments` holds files the agent produced. | A message |
 | Tool | Something the agent can call. The package ships render tools; hosts register their own. | `eloquent-agents` registry |
 
-A run has many attempts. Retries, provider fallback and recovery from a dead
+A run has many attempts, except a followed run, which has none. Retries, provider fallback and recovery from a dead
 worker each add an attempt; the run keeps one identity for the whole answer,
 so a client follows one record per prompt.
 
@@ -41,6 +41,22 @@ any unsettled state ──cancel──▶ cancelled
 - `waiting`: the agent proposed something that needs a person, such as an
   action awaiting approval. Reserved until a harness can suspend and resume.
 - `completed`, `failed`, `cancelled`: settled.
+
+## Followed runs
+
+Some answers come from work outside the agent: a video render, an import, a
+long export. Host code can show such work as a run. `RunFollower` starts a
+run straight in `running`, with harness `follow:<name>` and no attempt, and
+the host reports steps, draft text, blocks and questions as the work goes,
+then completes or fails it. Completion publishes through the executor, so
+rule 3 holds: the reply is created in the transaction that completes the
+run, and only while no attempt holds the claim.
+
+A followed run uses the same events, broadcasts, events stream and owner
+access as any run. The requester can cancel it, and later calls from the
+host then do nothing. Retry is refused with 409, since there is nothing to
+run again. Concurrency policies ignore followed runs, so a long render does
+not hold up the conversation.
 
 ## Rules every host gets
 
@@ -153,7 +169,7 @@ saves.
 | `owner` | Morph; copied from the conversation. |
 | `requester` | Nullable morph; the user the run acts as. |
 | `conversation_id`, `prompt_message_id`, `reply_message_id` | Reply set only on completion. |
-| `harness` | Harness name. |
+| `harness` | Harness name, or `follow:<name>` for a followed run. |
 | `status` | One of the lifecycle states. |
 | `language` | Nullable locale code. |
 | `options` | JSON run options. |
@@ -195,7 +211,7 @@ clients that poll or reconnect.
 | GET | `/agent-runs/{run}/attempts` | The attempt history. |
 | GET | `/agent-runs/{run}/events` | Server-sent events: `started`, `progress`, `text`, `block`, `reset`, then `settled` or `timeout`. |
 | POST | `/agent-runs/{run}/release` | Start a held run. |
-| POST | `/agent-runs/{run}/retry` | Requester only; failed runs only. |
+| POST | `/agent-runs/{run}/retry` | Requester only; failed runs only; never a followed run. |
 | POST | `/agent-runs/{run}/cancel` | Requester only; unsettled runs only. |
 | GET | `/agent-runs/{run}/export` | Export the run's canvas. |
 

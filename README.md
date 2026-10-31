@@ -88,11 +88,45 @@ Routes use the configured prefix (default `api`) and middleware (default `['api'
 | GET | `/agent-runs/{run}/attempts` | Every attempt in order. |
 | GET | `/agent-runs/{run}/events` | A server-sent events stream of the run until it settles. See below. |
 | POST | `/agent-runs/{run}/release` | Start a held run. Requester only; 409 unless held. |
-| POST | `/agent-runs/{run}/retry` | Queue a failed run again. Requester only, since the run executes with their access; 409 unless failed. |
+| POST | `/agent-runs/{run}/retry` | Queue a failed run again. Requester only, since the run executes with their access; 409 unless failed, and always 409 for a followed run. |
 | POST | `/agent-runs/{run}/cancel` | Cancel a run that has not settled. Requester only; 409 once settled. |
 | GET | `/agent-runs/{run}/export?format=md` | Download the run's canvas. 404 when there is none. |
 
 Post agent prompts through this endpoint rather than the conversations message endpoint. That endpoint accepts an author from the request body, and the agent acts with its author's access.
+
+## Followed runs
+
+A run can be fed by your own code instead of a harness, so long work outside the agent, such as a video render, shows in the conversation like any answer:
+
+```php
+use Whilesmart\AgentChat\Runs\RunFollower;
+
+$follower = app(RunFollower::class);
+$run = $follower->start($conversation, $user, 'render', 'Rendering the film', options: ['film_id' => $film->id]);
+
+// later, from the job doing the work, by run or run id:
+$follower->progress($run->id)->finish();
+$follower->progress($run->id)->start('Mixing the sound');
+$follower->text($run->id, 'Scene 3 of 5 is done.');
+$follower->block($run->id, ['type' => 'image', 'src' => $still->url]);
+$follower->ask($run->id, 'Keep the music?', ['Yes', 'No'], id: 'music');
+
+$follower->complete($run->id, 'The film is ready.', blocks: [...], attachments: [$video]);
+// or
+$follower->fail($run->id, 'The render farm is down.');
+```
+
+| Method | Does |
+|---|---|
+| `start(Model $conversation, ?Authenticatable $requester, string $name, ?string $label = null, array $options = [], int\|string\|null $promptMessageId = null, ?string $language = null): AgentRun` | Creates a `running` run with harness `follow:<name>`, no attempt and no harness execution, and starts `$label` as its first step. Throws `AuthorizationException` when the requester cannot reach the conversation's owner. |
+| `progress($run): RunProgress` | Steps saved on the run: `start()`, `finish()`, `fail()`. |
+| `text($run, string $text)` | Replaces the draft's text. |
+| `block($run, array $block): array` | Adds a block to the draft, checked like any block a tool adds. |
+| `ask($run, string $prompt, array $options, ?string $id = null, bool $multiple = false, bool\|string $writeIn = false, ?string $why = null, ?string $recommended = null): array` | Adds a question block, with the same settings as `ask_question`. |
+| `complete($run, string $text = '', array $blocks = [], array $attachments = []): bool` | Publishes the reply (the text, the draft's blocks, then `$blocks`, with the attachments) the way an agent run does, in the transaction that completes the run. Running steps are marked done. False when the run had already settled. |
+| `fail($run, string $reason)` | Fails the run; running steps are marked failed. |
+
+The run fires `AgentRunStarted`, `AgentRunProgressed`, `AgentRunCompleted` and `AgentRunFailed`, broadcasts like any run, and appears on the events stream. Access follows the conversation's owner. The requester can cancel it; after that every call does nothing, so the job can check the run's `status` and stop. Retrying a followed run is refused with 409, since there is no harness to run again; start a new one instead. A followed run never holds up prompts under the `queue` or `reject` concurrency policies. The draft is written by reading and saving the run, so feed one run from one job at a time.
 
 ## Live draft
 
@@ -183,7 +217,7 @@ Each step in `progress` is `{label, state}` with `state` set to `running`, `done
 | Event | When |
 |---|---|
 | `AgentRunQueued` | A run is queued, released or retried. |
-| `AgentRunStarted` | A worker starts executing a run. |
+| `AgentRunStarted` | A worker starts executing a run, or a followed run starts. |
 | `AgentRunProgressed` | A new progress step starts. |
 | `AgentRunAttemptFailed` | An attempt fails; the run may still try again. |
 | `AgentRunCompleted` | The reply is posted. |

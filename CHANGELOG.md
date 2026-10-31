@@ -8,6 +8,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Followed runs: host code can show work outside the agent, such as a video render, as a run in the conversation, with steps, draft text, blocks and questions, then complete it with a reply or fail it. They use the same events, broadcasts and access as agent runs, can be cancelled, cannot be retried, and never hold up prompts.
 - The reply streams while the run works. The run keeps a draft of the text and blocks so far, saved at a throttled rate and cleared when the run settles. The reply message is still created once, when the run completes. Run the new migration to add the draft column.
 - An events stream per run that sends its start, steps, text, blocks and settlement as server-sent events.
 - Text and block updates on the broadcast channel, paced like the draft.

@@ -39,7 +39,8 @@ class RunDispatcher
 
     /**
      * Whether another run in the conversation has not settled yet. Used to
-     * refuse a prompt under the reject policy.
+     * refuse a prompt under the reject policy. Followed runs track work
+     * outside the agent, so they never hold up a prompt.
      */
     public function busy(int|string $conversationId): bool
     {
@@ -47,6 +48,7 @@ class RunDispatcher
 
         return $model::query()
             ->where('conversation_id', $conversationId)
+            ->where('harness', 'not like', AgentRun::FOLLOW_PREFIX.'%')
             ->whereIn('status', [AgentRunStatus::Held->value, AgentRunStatus::Queued->value, AgentRunStatus::Running->value, AgentRunStatus::Waiting->value])
             ->exists();
     }
@@ -67,6 +69,7 @@ class RunDispatcher
         return $model::query()
             ->where('conversation_id', $run->conversation_id)
             ->whereKeyNot($run->getKey())
+            ->where('harness', 'not like', AgentRun::FOLLOW_PREFIX.'%')
             ->where(fn ($query) => $query
                 ->where('status', AgentRunStatus::Running->value)
                 ->orWhere(fn ($query) => $query

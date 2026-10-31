@@ -65,6 +65,7 @@ class RunExecutor
 
         $claimed = $model::query()
             ->whereKey($runId)
+            ->where('harness', 'not like', AgentRun::FOLLOW_PREFIX.'%')
             ->where(fn ($query) => $query
                 ->where('status', AgentRunStatus::Queued->value)
                 ->orWhere(fn ($query) => $query
@@ -221,21 +222,37 @@ class RunExecutor
         return true;
     }
 
-    /**
-     * Only the attempt holding the claim may publish, and the reply is created
-     * in the same transaction that completes the run, so delivery (queued
-     * after commit) only ever sends a finished answer.
-     */
     private function publish(AgentRun $run, AgentRunAttempt $attempt, AgentResult $result, BlockCollector $collector): void
     {
-        $model = config('agent-chat.model', AgentRun::class);
-        $blocks = $this->compose($result->text, $collector);
+        if (! $this->publishReply($run, $result->text, $collector, $attempt, $result)) {
+            $this->closeAttempt($attempt, AgentRunAttemptStatus::Abandoned, $result);
+        }
+    }
 
-        $published = DB::transaction(function () use ($model, $run, $attempt, $result, $blocks, $collector) {
+    /**
+     * Post the reply and complete the run. Only the attempt holding the claim
+     * may publish (for a followed run, which has no attempt, only while none
+     * is set), and the reply is created in the same transaction that
+     * completes the run, so delivery (queued after commit) only ever sends a
+     * finished answer. Returns false when the run was no longer ours.
+     */
+    public function publishReply(
+        AgentRun $run,
+        string $text,
+        BlockCollector $collector,
+        ?AgentRunAttempt $attempt = null,
+        ?AgentResult $result = null,
+    ): bool {
+        $model = config('agent-chat.model', AgentRun::class);
+        $blocks = $this->compose($text, $collector);
+
+        $published = DB::transaction(function () use ($model, $run, $attempt, $result, $text, $blocks, $collector) {
             $won = $model::query()
                 ->whereKey($run->getKey())
                 ->where('status', AgentRunStatus::Running->value)
-                ->where('current_attempt_id', $attempt->getKey())
+                ->where(fn ($query) => $attempt === null
+                    ? $query->whereNull('current_attempt_id')
+                    : $query->where('current_attempt_id', $attempt->getKey()))
                 ->whereNull('reply_message_id')
                 ->update(['status' => AgentRunStatus::Completed->value, 'error' => null, 'draft' => null, 'completed_at' => now()]);
 
@@ -246,13 +263,16 @@ class RunExecutor
             $reply = $run->conversation->messages()->create([
                 'type' => MessageType::Text,
                 'direction' => MessageDirection::Outbound,
-                'body' => $result->text,
+                'body' => $text,
                 'attachments' => $collector->attachments() ?: null,
                 'metadata' => ['agent_run_id' => $run->getKey(), 'harness' => $run->harness, 'blocks' => $blocks],
             ]);
 
             $model::query()->whereKey($run->getKey())->update(['reply_message_id' => $reply->getKey()]);
-            $this->closeAttempt($attempt, AgentRunAttemptStatus::Succeeded, $result);
+
+            if ($attempt !== null && $result !== null) {
+                $this->closeAttempt($attempt, AgentRunAttemptStatus::Succeeded, $result);
+            }
 
             return true;
         });
@@ -260,14 +280,14 @@ class RunExecutor
         $run->refresh();
 
         if (! $published) {
-            $this->closeAttempt($attempt, AgentRunAttemptStatus::Abandoned, $result);
-
-            return;
+            return false;
         }
 
         AgentRunCompleted::dispatch($run);
         $this->broadcast($run, 'settled');
         $this->dispatcher->next($run->conversation_id);
+
+        return true;
     }
 
     /**

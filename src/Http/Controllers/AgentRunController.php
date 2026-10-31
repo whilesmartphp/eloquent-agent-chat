@@ -147,10 +147,16 @@ class AgentRunController extends ApiController
     /**
      * Only the person who asked can retry, because the run executes with their
      * access. The status change is one conditional update, so two retries of
-     * the same run queue it once.
+     * the same run queue it once. A followed run has no harness to run again.
      */
     public function retry(Request $request, AgentRun $agentRun): JsonResponse
     {
+        if ($agentRun->isFollowed()) {
+            $this->authorizeAccessTo($agentRun, $request->user());
+
+            return $this->failure('A followed run tracks work outside the agent and cannot be retried.', Response::HTTP_CONFLICT);
+        }
+
         return $this->requeue($request, $agentRun, AgentRunStatus::Failed, 'Only a failed run can be retried.', [
             'error' => null,
             'progress' => null,

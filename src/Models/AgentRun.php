@@ -18,6 +18,11 @@ class AgentRun extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /**
+     * Harness prefix of a run fed by host code instead of a harness.
+     */
+    public const FOLLOW_PREFIX = 'follow:';
+
     protected $guarded = ['id'];
 
     protected $casts = [
@@ -91,6 +96,11 @@ class AgentRun extends Model
     public function currentAttempt(): BelongsTo
     {
         return $this->belongsTo(config('agent-chat.attempt_model', AgentRunAttempt::class), 'current_attempt_id');
+    }
+
+    public function isFollowed(): bool
+    {
+        return str_starts_with((string) $this->harness, self::FOLLOW_PREFIX);
     }
 
     public function isRequestedBy(mixed $user): bool
