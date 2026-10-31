@@ -7,6 +7,7 @@ use RuntimeException;
 use Tests\TestCase;
 use Whilesmart\AgentChat\Contracts\ProviderPlan;
 use Whilesmart\AgentChat\Contracts\RetryPolicy;
+use Whilesmart\AgentChat\Contracts\RunInputBuilder;
 use Whilesmart\AgentChat\Models\AgentRun;
 use Whilesmart\AgentChat\Models\AgentRunAttempt;
 use Whilesmart\Agents\ValueObjects\AgentResult;
@@ -124,5 +125,26 @@ class ProvidersAndRetriesTest extends TestCase
             ->assertJsonPath('data.status', 'failed')
             ->assertJsonPath('data.error', 'The agent stopped unexpectedly.');
         $this->getJson("/api/agent-runs/{$id}/attempts")->assertJsonPath('data.0.error', 'The agent stopped unexpectedly.');
+    }
+
+    #[Test]
+    public function a_message_that_cannot_be_made_ready_fails_the_run_instead_of_leaving_it_running(): void
+    {
+        $this->app->bind(RunInputBuilder::class, fn () => new class implements RunInputBuilder
+        {
+            public function build(AgentRun $run): string
+            {
+                throw new RuntimeException('The tools could not be reached.');
+            }
+        });
+
+        $id = $this->actingAs($this->user())
+            ->postJson("/api/conversations/{$this->conversation()->id}/agent-runs", ['body' => 'Plan a film'])
+            ->json('data.id');
+
+        $this->assertSame([], $this->harness->inputs);
+        $this->getJson("/api/agent-runs/{$id}")
+            ->assertJsonPath('data.status', 'failed')
+            ->assertJsonPath('data.error', 'The message could not be made ready for the agent.');
     }
 }

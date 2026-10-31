@@ -101,8 +101,15 @@ class RunExecutor
         AgentRunStarted::dispatch($run);
         $this->broadcast($run, 'started');
 
-        $input = $this->input->build($run);
-        $media = $this->media->resolve($run);
+        try {
+            $input = $this->input->build($run);
+            $media = $this->media->resolve($run);
+        } catch (Throwable $e) {
+            report($e);
+
+            return $this->settleUnfinished($run, $finalTry, 'The message could not be made ready for the agent.');
+        }
+
         $error = 'The agent could not finish this run.';
 
         foreach ($this->plan->candidates($run) ?: [[]] as $candidate) {
@@ -154,6 +161,15 @@ class RunExecutor
             }
         }
 
+        return $this->settleUnfinished($run, $finalTry, $error);
+    }
+
+    /**
+     * A run that got no answer goes back to the queue while it may be tried
+     * again, and fails with the reason once it may not.
+     */
+    private function settleUnfinished(AgentRun $run, bool $finalTry, string $error): bool
+    {
         if (! $finalTry && $this->stillOurs($run)) {
             $run->forceFill(['status' => AgentRunStatus::Queued, 'started_at' => null, 'progress' => null, 'draft' => null, 'error' => $error])->save();
 
