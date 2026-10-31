@@ -103,7 +103,7 @@ as the existing model, request, resource and controller settings.
 | Run options | A `metadata` object, validated by the configured request class. | Per prompt settings such as a format hint, a size preset or a brand kit. |
 | Language | The `language` sent with the prompt, else the app locale. | Replying in the person's language when the worker runs in another. |
 | Block types | Core types (below) plus types the host registers. | Host records shown in chat, such as a design version or a report card. |
-| Progress | Labels matched from tool names, plus a call a tool can make to report a step as it starts and ends. | Showing what the agent is doing while it runs. |
+| Progress | Labels matched from tool names, plus a call a tool can make to report a step as it starts, ends or fails. Steps are `running`, `done` or `failed`. | Showing what the agent is doing while it runs. |
 | Hold and release | Runs start `queued`. | Waiting for uploads or other input before the agent starts. |
 | Approval hook | Off. | Moving a run to `waiting` when an action needs approval. |
 
@@ -133,7 +133,7 @@ Core types: `markdown`, `table`, `kpi`, `chart`, `callout`, `timeline`,
 | `status` | One of the lifecycle states. |
 | `language` | Nullable locale code. |
 | `options` | JSON run options. |
-| `progress` | JSON list of steps for clients. |
+| `progress` | JSON list of steps for clients: `label`, `state` (`running`, `done`, `failed`) and an optional `detail`. A failed attempt marks its running step failed; a completed run marks any running step done. |
 | `current_attempt_id` | The attempt allowed to publish. |
 | `error` | The latest failure, for clients. |
 | `queued_at`, `started_at`, `completed_at`, timestamps, soft deletes | |

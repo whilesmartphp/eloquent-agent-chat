@@ -4,6 +4,12 @@ All notable changes to this package are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Progress steps can fail. A step is running, done or failed, and a failed step can say why. When an attempt fails, the step it was on is marked failed, and when a run gets its answer, any step still running is marked done.
+
 ## [1.0.0] - 2026-10-31
 
 ### Added

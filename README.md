@@ -106,7 +106,11 @@ $progress = app(\Whilesmart\AgentChat\Runs\RunProgress::class);
 $progress->start('Rendering the design');
 // ...
 $progress->finish();
+// or, when it went wrong:
+$progress->fail(detail: 'The template is missing.');
 ```
+
+Each step in `progress` is `{label, state}` with `state` set to `running`, `done` or `failed`; a failed step may also carry a `detail`. When an attempt fails, the step it was on is marked failed. When the run gets its answer, any step still running is marked done, so a step never hangs.
 
 ## Events
 

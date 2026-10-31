@@ -32,6 +32,9 @@ class ScriptedHarness implements StreamingHarness
 
     private Closure $script;
 
+    /** @var callable|null */
+    private $onEvent = null;
+
     public function __construct(private string $harnessName = 'assistant')
     {
         $this->script = fn () => AgentResult::success('Done.');
@@ -45,6 +48,17 @@ class ScriptedHarness implements StreamingHarness
         $this->script = $script;
 
         return $this;
+    }
+
+    /**
+     * Emit a stream event from inside a script, as an engine would while the
+     * model writes text or starts a tool call.
+     */
+    public function emit(AgentStreamEvent $event): void
+    {
+        if ($this->onEvent !== null) {
+            ($this->onEvent)($event);
+        }
     }
 
     public function name(): string
@@ -98,6 +112,7 @@ class ScriptedHarness implements StreamingHarness
         $this->contexts[] = $context;
         $this->media[] = $media;
         $this->overrides[] = $overrides;
+        $this->onEvent = $onEvent;
 
         $call = function (string $tool, array $arguments = []) use ($onEvent, $context) {
             $onEvent(AgentStreamEvent::toolCall($tool, $arguments));

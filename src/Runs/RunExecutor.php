@@ -132,12 +132,14 @@ class RunExecutor
             }
 
             if ($result->ok && $result->finishReason !== 'error') {
+                $progress->finishAll();
                 $this->publish($run, $attempt, $result, $collector);
 
                 return true;
             }
 
             $error = $result->ok ? 'The answer was cut off before it finished.' : ($result->error ?? $error);
+            $progress->failAll($error);
             $retryable = $this->retry->retryable($run, $attempt, $result);
             $this->closeAttempt($attempt, AgentRunAttemptStatus::Failed, $result, $error, $retryable);
             AgentRunAttemptFailed::dispatch($run, $attempt->refresh());
@@ -166,11 +168,17 @@ class RunExecutor
     public function fail(AgentRun $run, string $error): void
     {
         $model = config('agent-chat.model', AgentRun::class);
+        $steps = RunProgress::settled((array) ($model::query()->whereKey($run->getKey())->value('progress') ?? []), RunProgress::FAILED);
 
         $failed = $model::query()
             ->whereKey($run->getKey())
             ->whereIn('status', AgentRunStatus::unsettledValues())
-            ->update(['status' => AgentRunStatus::Failed->value, 'error' => $error, 'completed_at' => now()]);
+            ->update([
+                'status' => AgentRunStatus::Failed->value,
+                'error' => $error,
+                'progress' => $steps === [] ? null : json_encode($steps),
+                'completed_at' => now(),
+            ]);
 
         $run->refresh();
 
